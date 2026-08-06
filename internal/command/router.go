@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type Handler func(ctx *Context) error
+type Handler func(ctx *CommandContext) error
 
 type Router struct {
 	handlers map[string]Handler
@@ -21,7 +21,7 @@ func (r *Router) Register(name string, handler Handler) {
 	r.handlers[strings.ToUpper(name)] = handler
 }
 
-func (r *Router) Handle(ctx *Context) error {
+func (r *Router) Handle(ctx *CommandContext) error {
 	if len(ctx.Args) == 0 {
 		return ctx.Writer.WriteError("ERR empty command")
 	}

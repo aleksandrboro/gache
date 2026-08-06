@@ -5,7 +5,7 @@ import (
 	"github.com/aleksandrboro/gache/internal/storage"
 )
 
-type Context struct {
+type CommandContext struct {
 	Args   []protocol.RESPValue
 	Writer *protocol.Writer
 	Store  *storage.Store
