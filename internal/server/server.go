@@ -30,12 +30,12 @@ func NewServer(addr string, store *storage.Store, router *command.Router) *Serve
 func (s *Server) Start() error {
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
-		return fmt.Errorf("failed to create listener. addr: %s", s.addr)
+		return fmt.Errorf("failed to create listener. addr: %s\n", s.addr)
 	}
 
 	s.listener = listener
 
-	fmt.Printf("server listening on %s", s.addr)
+	fmt.Printf("server listening on %s\n", s.addr)
 
 	for {
 		conn, err := listener.Accept()
@@ -70,9 +70,34 @@ func (s *Server) handleConn(conn net.Conn) {
 
 		if val.Type != protocol.Array || len(val.Array) == 0 {
 			writer.WriteError("ERR invalid command format")
+			writer.Flush()
 			continue
 		}
 
-		ctx := 
+		ctx := &command.CommandContext{
+			Args:   val.Array,
+			Writer: writer,
+			Store:  s.store,
+		}
+
+		if err := s.router.Handle(ctx); err != nil {
+			if errors.Is(err, command.ErrQuit) {
+				return
+			}
+
+			writer.WriteError("ERR failed to handle request")
+			writer.Flush()
+			continue
+		}
+
+		writer.Flush()
 	}
+}
+
+func (s *Server) Stop() error {
+	if s.listener != nil {
+		return s.listener.Close()
+	}
+
+	return nil
 }
