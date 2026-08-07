@@ -17,6 +17,16 @@ func NewRouter() *Router {
 	}
 }
 
+func (r *Router) RegisterCommands() {
+	r.Register("PING", cmdPing)
+	r.Register("ECHO", cmdEcho)
+	r.Register("SET", cmdSet)
+	r.Register("GET", cmdGet)
+	r.Register("DEL", cmdDel)
+	r.Register("EXISTS", cmdExists)
+	r.Register("QUIT", cmdQuit)
+}
+
 func (r *Router) Register(name string, handler Handler) {
 	r.handlers[strings.ToUpper(name)] = handler
 }
