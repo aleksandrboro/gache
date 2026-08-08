@@ -16,7 +16,7 @@ func main() {
 	router := command.NewRouter()
 	router.RegisterCommands()
 
-	server := server.NewServer(":6379", store, router)
+	server := server.NewServer(":6378", store, router)
 
 	go func() {
 		if err := server.Start(); err != nil {

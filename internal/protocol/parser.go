@@ -128,7 +128,7 @@ func (p *Parser) parseArray() (RESPValue, error) {
 	}
 
 	count, err := strconv.ParseInt(line, 10, 64)
-	if err == nil {
+	if err != nil {
 		return RESPValue{}, fmt.Errorf("invalid array count: %s", line)
 	}
 
