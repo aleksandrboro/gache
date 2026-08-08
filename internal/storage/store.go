@@ -1,6 +1,9 @@
 package storage
 
 import (
+	"fmt"
+	"math"
+	"strconv"
 	"sync"
 )
 
@@ -92,10 +95,21 @@ func (s *Store) Exists(keys ...string) int {
 	return count
 }
 
-func (s *Store) Incr(key string) (int64, error)
-func (s *Store) IncrBy(key string, increment int64) (int64, error)
-func (s *Store) Decr(key string) (int64, error)
-func (s *Store) DecrBy(key string, decrement int64) (int64, error)
+func (s *Store) Incr(key string) (int64, error) {
+	return s.incrByFloat(key, 1)
+}
+
+func (s *Store) Decr(key string) (int64, error) {
+	return s.incrByFloat(key, -1)
+}
+
+func (s *Store) IncrBy(key string, increment int64) (int64, error) {
+	return s.incrByFloat(key, increment)
+}
+
+func (s *Store) DecrBy(key string, decrement int64) (int64, error) {
+	return s.incrByFloat(key, -decrement)
+}
 
 func (s *Store) getShard(key string) *Shard {
 	h := uint32(2166136261)
@@ -105,4 +119,34 @@ func (s *Store) getShard(key string) *Shard {
 	}
 
 	return &s.shards[h%256]
+}
+
+func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
+	shard := s.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	v := shard.data[key]
+	var num int64
+
+	if v == nil {
+		num = 0
+	} else {
+		var err error
+		num, err = strconv.ParseInt(string(v), 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("ERR value is not an integer or out of range")
+		}
+	}
+
+	if (increment > 0 && num > math.MaxInt64-increment) ||
+		(increment < 0 && num < math.MinInt64-increment) {
+		return 0, fmt.Errorf("ERR increment or decrement would overflow")
+	}
+
+	num += increment
+
+	shard.data[key] = []byte(strconv.FormatInt(num, 10))
+
+	return num, nil
 }

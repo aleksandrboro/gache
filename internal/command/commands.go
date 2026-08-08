@@ -1,6 +1,9 @@
 package command
 
-import "errors"
+import (
+	"errors"
+	"strconv"
+)
 
 var ErrQuit = errors.New("quit")
 
@@ -77,6 +80,74 @@ func cmdExists(ctx *CommandContext) error {
 
 	existsCount := ctx.Store.Exists(keys...)
 	return ctx.Writer.WriteInteger(int64(existsCount))
+}
+
+func cmdIncr(ctx *CommandContext) error {
+	if len(ctx.Args) < 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'incr' command")
+	}
+
+	key := ctx.Args[1].Str
+
+	n, err := ctx.Store.Incr(key)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(n)
+}
+
+func cmdIncrBy(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'incrBy' command")
+	}
+
+	key := ctx.Args[1].Str
+	num, err := strconv.ParseInt(ctx.Args[2].Str, 10, 64)
+	if err != nil {
+		return ctx.Writer.WriteError("ERR value is not an integer or out of range")
+	}
+
+	n, err := ctx.Store.IncrBy(key, num)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(n)
+}
+
+func cmdDecr(ctx *CommandContext) error {
+	if len(ctx.Args) < 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'decr' command")
+	}
+
+	key := ctx.Args[1].Str
+
+	n, err := ctx.Store.Decr(key)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(n)
+}
+
+func cmdDecrBy(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'decrBy' command")
+	}
+
+	key := ctx.Args[1].Str
+	num, err := strconv.ParseInt(ctx.Args[2].Str, 10, 64)
+	if err != nil {
+		return ctx.Writer.WriteError("ERR value is not an integer or out of range")
+	}
+
+	n, err := ctx.Store.DecrBy(key, num)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(n)
 }
 
 func cmdQuit(ctx *CommandContext) error {
