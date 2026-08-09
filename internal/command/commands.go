@@ -3,6 +3,8 @@ package command
 import (
 	"errors"
 	"strconv"
+
+	"github.com/aleksandrboro/gache/internal/protocol"
 )
 
 var ErrQuit = errors.New("quit")
@@ -148,6 +150,51 @@ func cmdDecrBy(ctx *CommandContext) error {
 	}
 
 	return ctx.Writer.WriteInteger(n)
+}
+
+func cmdMSet(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 || (len(ctx.Args)-1)%2 != 0 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'mset' command")
+	}
+
+	pairs := make(map[string][]byte)
+
+	for i := 1; i < len(ctx.Args); i += 2 {
+		pairs[ctx.Args[i].Str] = []byte(ctx.Args[i+1].Str)
+	}
+
+	ctx.Store.MSet(pairs)
+	return ctx.Writer.WriteSimpleString("OK")
+}
+
+func cmdMGet(ctx *CommandContext) error {
+	if len(ctx.Args) < 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'mget' command")
+	}
+
+	keys := make([]string, len(ctx.Args)-1)
+	for i, v := range ctx.Args[1:] {
+		keys[i] = v.Str
+	}
+
+	values := ctx.Store.MGet(keys)
+	resp := make([]protocol.RESPValue, len(values))
+	for i, v := range values {
+		if v != nil {
+			resp[i] = protocol.RESPValue{
+				Type: protocol.BulkString,
+				Str:  string(v),
+			}
+			continue
+		}
+
+		resp[i] = protocol.RESPValue{
+			Type:   protocol.BulkString,
+			IsNull: true,
+		}
+	}
+
+	return ctx.Writer.WriteArray(resp)
 }
 
 func cmdQuit(ctx *CommandContext) error {

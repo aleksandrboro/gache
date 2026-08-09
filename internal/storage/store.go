@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"sync"
 )
@@ -149,4 +150,46 @@ func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
 	shard.data[key] = []byte(strconv.FormatInt(num, 10))
 
 	return num, nil
+}
+
+func (s *Store) MSet(pairs map[string][]byte) {
+	shards := []*Shard{}
+
+	for k := range pairs {
+		shard := s.getShard(k)
+		if !slices.Contains(shards, shard) {
+			shards = append(shards, shard)
+		}
+	}
+
+	for _, shard := range shards {
+		shard.mu.Lock()
+	}
+
+	for k, v := range pairs {
+		shard := s.getShard(k)
+		shard.data[k] = v
+	}
+
+	for _, shard := range shards {
+		shard.mu.Unlock()
+	}
+}
+
+func (s *Store) MGet(keys []string) [][]byte {
+	resp := make([][]byte, len(keys))
+
+	for i, key := range keys {
+		shard := s.getShard(key)
+		shard.mu.RLock()
+		v, ok := shard.data[key]
+		if !ok {
+			resp[i] = nil
+		} else {
+			resp[i] = v
+		}
+		shard.mu.RUnlock()
+	}
+
+	return resp
 }

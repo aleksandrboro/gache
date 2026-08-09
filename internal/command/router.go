@@ -29,6 +29,8 @@ func (r *Router) RegisterCommands() {
 	r.Register("DECR", cmdDecr)
 	r.Register("DECRBY", cmdDecrBy)
 	r.Register("QUIT", cmdQuit)
+	r.Register("MSET", cmdMSet)
+	r.Register("MGET", cmdMGet)
 }
 
 func (r *Router) Register(name string, handler Handler) {
