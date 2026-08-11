@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type Store struct {
@@ -14,13 +15,18 @@ type Store struct {
 
 type Shard struct {
 	mu   sync.RWMutex
-	data map[string][]byte
+	data map[string]*Entry
+}
+
+type Entry struct {
+	Value    []byte
+	ExpireAt int64
 }
 
 func NewStore() *Store {
 	store := &Store{}
 	for i := range store.shards {
-		store.shards[i].data = make(map[string][]byte)
+		store.shards[i].data = make(map[string]*Entry)
 	}
 
 	return store
@@ -29,16 +35,35 @@ func NewStore() *Store {
 func (s *Store) Get(key string) ([]byte, bool) {
 	sh := s.getShard(key)
 	sh.mu.RLock()
-	defer sh.mu.RUnlock()
 	v, ok := sh.data[key]
-	return v, ok
+	if !ok {
+		sh.mu.RUnlock()
+		return nil, ok
+	}
+
+	if sh.data[key].ExpireAt > 0 && time.Now().UnixNano() > sh.data[key].ExpireAt {
+		sh.mu.RUnlock()
+		sh.mu.Lock()
+		entry := sh.data[key]
+		if entry != nil && entry.ExpireAt > 0 && time.Now().UnixNano() > entry.ExpireAt {
+			delete(sh.data, key)
+		}
+
+		sh.mu.Unlock()
+		return nil, false
+	}
+
+	sh.mu.RUnlock()
+	return v.Value, ok
 }
 
 func (s *Store) Set(key string, value []byte) {
 	sh := s.getShard(key)
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
-	sh.data[key] = value
+	sh.data[key] = &Entry{
+		Value: value,
+	}
 }
 
 func (s *Store) Del(keys ...string) int {
@@ -127,14 +152,17 @@ func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 
-	v := shard.data[key]
+	v, ok := shard.data[key]
+	if !ok {
+		shard.data[key] = &Entry{}
+	}
 	var num int64
 
 	if v == nil {
 		num = 0
 	} else {
 		var err error
-		num, err = strconv.ParseInt(string(v), 10, 64)
+		num, err = strconv.ParseInt(string(v.Value), 10, 64)
 		if err != nil {
 			return 0, fmt.Errorf("ERR value is not an integer or out of range")
 		}
@@ -147,7 +175,7 @@ func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
 
 	num += increment
 
-	shard.data[key] = []byte(strconv.FormatInt(num, 10))
+	shard.data[key].Value = []byte(strconv.FormatInt(num, 10))
 
 	return num, nil
 }
@@ -168,7 +196,9 @@ func (s *Store) MSet(pairs map[string][]byte) {
 
 	for k, v := range pairs {
 		shard := s.getShard(k)
-		shard.data[k] = v
+		shard.data[k] = &Entry{
+			Value: v,
+		}
 	}
 
 	for _, shard := range shards {
@@ -186,10 +216,65 @@ func (s *Store) MGet(keys []string) [][]byte {
 		if !ok {
 			resp[i] = nil
 		} else {
-			resp[i] = v
+			resp[i] = v.Value
 		}
 		shard.mu.RUnlock()
 	}
 
 	return resp
+}
+
+func (s *Store) SetWithTTL(key string, value []byte, ttl int64) {
+	shard := s.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	shard.data[key] = &Entry{
+		Value:    value,
+		ExpireAt: time.Now().Add(time.Duration(ttl)).UnixNano(),
+	}
+}
+
+func (s *Store) Expire(key string, ttl int64) bool {
+	shard := s.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if _, ok := shard.data[key]; !ok {
+		return false
+	}
+
+	shard.data[key].ExpireAt = time.Now().Add(time.Duration(ttl)).UnixNano()
+
+	return true
+}
+
+func (s *Store) TTL(key string) int64 {
+	shard := s.getShard(key)
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+	v, ok := shard.data[key]
+	if !ok {
+		return -2
+	}
+
+	if v.ExpireAt == 0 {
+		return -1
+	}
+
+	return v.ExpireAt - time.Now().UnixNano()
+}
+
+func (s *Store) Persist(key string) bool {
+	shard := s.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if _, ok := shard.data[key]; !ok {
+		return false
+	}
+
+	if shard.data[key].ExpireAt == 0 {
+		return false
+	}
+
+	shard.data[key].ExpireAt = 0
+	return true
 }

@@ -3,6 +3,7 @@ package command
 import (
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/aleksandrboro/gache/internal/protocol"
 )
@@ -195,6 +196,83 @@ func cmdMGet(ctx *CommandContext) error {
 	}
 
 	return ctx.Writer.WriteArray(resp)
+}
+
+func cmdExpire(ctx *CommandContext) error {
+	if len(ctx.Args) != 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'expire' command")
+	}
+
+	seconds, err := strconv.Atoi(ctx.Args[2].Str)
+	if err != nil {
+		return ctx.Writer.WriteError("ERR value is not an integer")
+	}
+
+	ok := ctx.Store.Expire(ctx.Args[1].Str, (time.Duration(seconds) * time.Second).Nanoseconds())
+	if ok {
+		return ctx.Writer.WriteInteger(1)
+	}
+
+	return ctx.Writer.WriteInteger(0)
+}
+
+func cmdPExpire(ctx *CommandContext) error {
+	if len(ctx.Args) != 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'pexpire' command")
+	}
+
+	millisecs, err := strconv.Atoi(ctx.Args[2].Str)
+	if err != nil {
+		return ctx.Writer.WriteError("ERR value is not an integer")
+	}
+
+	ok := ctx.Store.Expire(ctx.Args[1].Str, (time.Duration(millisecs) * time.Millisecond).Nanoseconds())
+	if ok {
+		return ctx.Writer.WriteInteger(1)
+	}
+
+	return ctx.Writer.WriteInteger(0)
+}
+
+func cmdTTL(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'ttl' command")
+	}
+
+	nanosecs := ctx.Store.TTL(ctx.Args[1].Str)
+
+	if nanosecs == -1 || nanosecs == -2 {
+		return ctx.Writer.WriteInteger(nanosecs)
+	}
+
+	return ctx.Writer.WriteInteger(nanosecs / int64(time.Second))
+}
+
+func cmdPTTL(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'pttl' command")
+	}
+
+	nanosecs := ctx.Store.TTL(ctx.Args[1].Str)
+
+	if nanosecs == -1 || nanosecs == -2 {
+		return ctx.Writer.WriteInteger(nanosecs)
+	}
+
+	return ctx.Writer.WriteInteger(nanosecs / int64(time.Millisecond))
+}
+
+func cmdPersist(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'persist' command")
+	}
+
+	ok := ctx.Store.Persist(ctx.Args[1].Str)
+	if ok {
+		return ctx.Writer.WriteInteger(1)
+	}
+
+	return ctx.Writer.WriteInteger(0)
 }
 
 func cmdQuit(ctx *CommandContext) error {
