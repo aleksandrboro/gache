@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -15,6 +16,11 @@ func main() {
 	store := storage.NewStore()
 	router := command.NewRouter()
 	router.RegisterCommands()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go store.StartExpirationLoop(ctx)
 
 	server := server.NewServer(":6378", store, router)
 
@@ -31,6 +37,7 @@ func main() {
 
 	<-sign
 
+	cancel()
 	if err := server.Stop(); err != nil {
 		fmt.Println(err)
 	}

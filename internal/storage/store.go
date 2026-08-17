@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"slices"
@@ -109,7 +110,9 @@ func (s *Store) Exists(keys ...string) int {
 	for sh, keysInShard := range keysByShard {
 		for _, key := range keysInShard {
 			if _, ok := sh.data[key]; ok {
-				count++
+				if sh.data[key].ExpireAt > time.Now().UnixNano() || sh.data[key].ExpireAt == 0 {
+					count++
+				}
 			}
 		}
 	}
@@ -160,6 +163,9 @@ func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
 
 	if v == nil {
 		num = 0
+	} else if v.ExpireAt <= time.Now().UnixNano() && v.ExpireAt != 0 {
+		num = 0
+		v.ExpireAt = 0
 	} else {
 		var err error
 		num, err = strconv.ParseInt(string(v.Value), 10, 64)
@@ -216,6 +222,13 @@ func (s *Store) MGet(keys []string) [][]byte {
 		if !ok {
 			resp[i] = nil
 		} else {
+			if v.ExpireAt <= time.Now().UnixNano() && v.ExpireAt != 0 {
+				shard.mu.RUnlock()
+				shard.mu.Lock()
+				delete(shard.data, key)
+				shard.mu.Unlock()
+				continue
+			}
 			resp[i] = v.Value
 		}
 		shard.mu.RUnlock()
@@ -277,4 +290,55 @@ func (s *Store) Persist(key string) bool {
 
 	shard.data[key].ExpireAt = 0
 	return true
+}
+
+func (s *Store) StartExpirationLoop(ctx context.Context) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for i := range s.shards {
+				go expirationLoop(&s.shards[i])
+			}
+		}
+	}
+}
+
+func expirationLoop(shard *Shard) {
+	for range 5 {
+		itterations := 0
+		var checked, expired int
+
+		shard.mu.RLock()
+		for key, value := range shard.data {
+			if itterations == 20 {
+				break
+			}
+
+			if value.ExpireAt <= time.Now().UnixNano() && value.ExpireAt != 0 {
+				expired++
+				shard.mu.RUnlock()
+				shard.mu.Lock()
+				entry := shard.data[key]
+				if entry != nil && entry.ExpireAt != 0 && entry.ExpireAt <= time.Now().UnixNano() {
+					delete(shard.data, key)
+				}
+				shard.mu.Unlock()
+				shard.mu.RLock()
+			}
+
+			itterations++
+			checked++
+		}
+
+		shard.mu.RUnlock()
+
+		if expired < checked/4 {
+			return
+		}
+	}
 }
