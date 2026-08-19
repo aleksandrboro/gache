@@ -2,12 +2,18 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
+)
+
+var (
+	ErrWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	ErrEmptyList = errors.New("EMPTYLIST List is empty")
 )
 
 type Store struct {
@@ -20,7 +26,7 @@ type Shard struct {
 }
 
 type Entry struct {
-	Value    []byte
+	Value    Value
 	ExpireAt int64
 }
 
@@ -54,8 +60,14 @@ func (s *Store) Get(key string) ([]byte, bool) {
 		return nil, false
 	}
 
+	if v.Value.Type() != stringType {
+		sh.mu.RUnlock()
+		return nil, false
+	}
+
 	sh.mu.RUnlock()
-	return v.Value, ok
+
+	return v.Value.(StringValue).Data, ok
 }
 
 func (s *Store) Set(key string, value []byte) {
@@ -63,7 +75,9 @@ func (s *Store) Set(key string, value []byte) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
 	sh.data[key] = &Entry{
-		Value: value,
+		Value: StringValue{
+			Data: value,
+		},
 	}
 }
 
@@ -157,18 +171,25 @@ func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
 
 	v, ok := shard.data[key]
 	if !ok {
-		shard.data[key] = &Entry{}
+		shard.data[key] = &Entry{
+			Value: StringValue{},
+		}
+
+		v = shard.data[key]
 	}
+
+	if v.Value.Type() != stringType {
+		return 0, ErrWrongType
+	}
+
 	var num int64
 
-	if v == nil {
-		num = 0
-	} else if v.ExpireAt <= time.Now().UnixNano() && v.ExpireAt != 0 {
+	if v.ExpireAt <= time.Now().UnixNano() && v.ExpireAt != 0 {
 		num = 0
 		v.ExpireAt = 0
 	} else {
 		var err error
-		num, err = strconv.ParseInt(string(v.Value), 10, 64)
+		num, err = strconv.ParseInt(string(v.Value.(StringValue).Data), 10, 64)
 		if err != nil {
 			return 0, fmt.Errorf("ERR value is not an integer or out of range")
 		}
@@ -181,7 +202,9 @@ func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
 
 	num += increment
 
-	shard.data[key].Value = []byte(strconv.FormatInt(num, 10))
+	shard.data[key].Value = StringValue{
+		Data: []byte(strconv.FormatInt(num, 10)),
+	}
 
 	return num, nil
 }
@@ -203,7 +226,9 @@ func (s *Store) MSet(pairs map[string][]byte) {
 	for k, v := range pairs {
 		shard := s.getShard(k)
 		shard.data[k] = &Entry{
-			Value: v,
+			Value: StringValue{
+				Data: v,
+			},
 		}
 	}
 
@@ -229,7 +254,11 @@ func (s *Store) MGet(keys []string) [][]byte {
 				shard.mu.Unlock()
 				continue
 			}
-			resp[i] = v.Value
+			if v.Value.Type() == stringType {
+				resp[i] = v.Value.(StringValue).Data
+			} else {
+				resp[i] = nil
+			}
 		}
 		shard.mu.RUnlock()
 	}
@@ -242,7 +271,9 @@ func (s *Store) SetWithTTL(key string, value []byte, ttl int64) {
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 	shard.data[key] = &Entry{
-		Value:    value,
+		Value: StringValue{
+			Data: value,
+		},
 		ExpireAt: time.Now().Add(time.Duration(ttl)).UnixNano(),
 	}
 }
@@ -290,6 +321,194 @@ func (s *Store) Persist(key string) bool {
 
 	shard.data[key].ExpireAt = 0
 	return true
+}
+
+func (s *Store) LPush(key string, values ...[]byte) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if _, ok := shard.data[key]; !ok {
+		shard.data[key] = &Entry{
+			Value: ListValue{},
+		}
+	}
+
+	if shard.data[key].Value == nil {
+		shard.data[key].Value = ListValue{}
+	}
+
+	if shard.data[key].Value.Type() != listType {
+		return 0, ErrWrongType
+	}
+
+	list := shard.data[key].Value.(ListValue)
+	slices.Reverse(values)
+	shard.data[key].Value = ListValue{
+		Data: append(values, list.Data...),
+	}
+
+	return len(shard.data[key].Value.(ListValue).Data), nil
+}
+
+func (s *Store) RPush(key string, values ...[]byte) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if _, ok := shard.data[key]; !ok {
+		shard.data[key] = &Entry{
+			Value: ListValue{},
+		}
+	}
+
+	if shard.data[key].Value == nil {
+		shard.data[key].Value = ListValue{}
+	}
+
+	if shard.data[key].Value.Type() != listType {
+		return 0, ErrWrongType
+	}
+
+	list := shard.data[key].Value.(ListValue)
+	shard.data[key].Value = ListValue{
+		Data: append(list.Data, values...),
+	}
+
+	return len(shard.data[key].Value.(ListValue).Data), nil
+}
+
+func (s *Store) LPop(key string) ([]byte, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return nil, ErrEmptyList
+	}
+
+	if shard.data[key].Value == nil {
+		return nil, ErrEmptyList
+	}
+
+	if shard.data[key].Value.Type() != listType {
+		return nil, ErrWrongType
+	}
+
+	list := shard.data[key].Value.(ListValue)
+
+	if len(list.Data) == 0 {
+		return nil, ErrEmptyList
+	}
+
+	poped := list.Data[0]
+	shard.data[key].Value = ListValue{
+		Data: list.Data[1:],
+	}
+
+	if len(shard.data[key].Value.(ListValue).Data) == 0 {
+		delete(shard.data, key)
+	}
+
+	return poped, nil
+}
+
+func (s *Store) RPop(key string) ([]byte, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return nil, ErrEmptyList
+	}
+
+	if shard.data[key].Value == nil {
+		return nil, ErrEmptyList
+	}
+
+	if shard.data[key].Value.Type() != listType {
+		return nil, ErrWrongType
+	}
+
+	list := shard.data[key].Value.(ListValue)
+
+	if len(list.Data) == 0 {
+		return nil, ErrEmptyList
+	}
+
+	poped := list.Data[len(list.Data)-1]
+	shard.data[key].Value = ListValue{
+		Data: list.Data[:len(list.Data)-1],
+	}
+
+	if len(shard.data[key].Value.(ListValue).Data) == 0 {
+		delete(shard.data, key)
+	}
+
+	return poped, nil
+}
+
+func (s *Store) LLen(key string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, nil
+	}
+
+	if shard.data[key].Value == nil {
+		return 0, nil
+	}
+
+	if shard.data[key].Value.Type() != listType {
+		return 0, ErrWrongType
+	}
+
+	list := shard.data[key].Value.(ListValue)
+	return len(list.Data), nil
+}
+
+func (s *Store) LRange(key string, start, stop int) ([][]byte, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return [][]byte{}, nil
+	}
+
+	if shard.data[key].Value == nil {
+		return [][]byte{}, nil
+	}
+
+	if shard.data[key].Value.Type() != listType {
+		return nil, ErrWrongType
+	}
+
+	list := shard.data[key].Value.(ListValue)
+
+	if start < 0 {
+		start = len(list.Data) + start
+	}
+	if stop < 0 {
+		stop = len(list.Data) + stop
+	}
+	if start < 0 {
+		start = 0
+	}
+	if stop >= len(list.Data) {
+		stop = len(list.Data) - 1
+	}
+	if start > stop {
+		return [][]byte{}, nil
+	}
+
+	return list.Data[start : stop+1], nil
 }
 
 func (s *Store) StartExpirationLoop(ctx context.Context) {

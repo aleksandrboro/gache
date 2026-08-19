@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aleksandrboro/gache/internal/protocol"
+	"github.com/aleksandrboro/gache/internal/storage"
 )
 
 var ErrQuit = errors.New("quit")
@@ -273,6 +274,132 @@ func cmdPersist(ctx *CommandContext) error {
 	}
 
 	return ctx.Writer.WriteInteger(0)
+}
+
+func cmdLPush(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'lpush' command")
+	}
+
+	key := ctx.Args[1]
+	values := make([][]byte, 0, len(ctx.Args[2:]))
+
+	for _, v := range ctx.Args[2:] {
+		values = append(values, []byte(v.Str))
+	}
+
+	num, err := ctx.Store.LPush(key.Str, values...)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
+func cmdRPush(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'rpush' command")
+	}
+
+	key := ctx.Args[1]
+	values := make([][]byte, 0, len(ctx.Args[2:]))
+
+	for _, v := range ctx.Args[2:] {
+		values = append(values, []byte(v.Str))
+	}
+
+	num, err := ctx.Store.RPush(key.Str, values...)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
+func cmdLPop(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'lpop' command")
+	}
+
+	key := ctx.Args[1]
+
+	value, err := ctx.Store.LPop(key.Str)
+	if err != nil {
+		if errors.Is(err, storage.ErrEmptyList) {
+			return ctx.Writer.WriteNull()
+		}
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteBulkString(string(value))
+}
+
+func cmdRPop(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'rpop' command")
+	}
+
+	key := ctx.Args[1]
+
+	value, err := ctx.Store.RPop(key.Str)
+	if err != nil {
+		if errors.Is(err, storage.ErrEmptyList) {
+			return ctx.Writer.WriteNull()
+		}
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteBulkString(string(value))
+}
+
+func cmdLLen(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'llen' command")
+	}
+
+	key := ctx.Args[1]
+
+	num, err := ctx.Store.LLen(key.Str)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
+func cmdLRange(ctx *CommandContext) error {
+	if len(ctx.Args) != 4 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'lrange' command")
+	}
+
+	key := ctx.Args[1]
+
+	start, err := strconv.ParseInt(ctx.Args[2].Str, 10, 64)
+	if err != nil {
+		return ctx.Writer.WriteError("ERR value is not an integer")
+	}
+
+	stop, err := strconv.ParseInt(ctx.Args[3].Str, 10, 64)
+	if err != nil {
+		return ctx.Writer.WriteError("ERR value is not an integer")
+	}
+
+	list, err := ctx.Store.LRange(key.Str, int(start), int(stop))
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	resp := make([]protocol.RESPValue, len(list))
+
+	for i, v := range list {
+		resp[i] = protocol.RESPValue{
+			Type: protocol.BulkString,
+			Str:  string(v),
+		}
+	}
+
+	return ctx.Writer.WriteArray(resp)
 }
 
 func cmdQuit(ctx *CommandContext) error {
