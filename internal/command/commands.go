@@ -402,6 +402,38 @@ func cmdLRange(ctx *CommandContext) error {
 	return ctx.Writer.WriteArray(resp)
 }
 
+func cmdHSet(ctx *CommandContext) error {
+
+}
+
+func cmdHGet(ctx *CommandContext) error {
+
+}
+
+func cmdHDel(ctx *CommandContext) error {
+
+}
+
+func cmdHGetAll(ctx *CommandContext) error {
+
+}
+
+func cmdHKeys(ctx *CommandContext) error {
+
+}
+
+func cmdHVals(ctx *CommandContext) error {
+
+}
+
+func cmdHLen(ctx *CommandContext) error {
+
+}
+
+func cmdHExists(ctx *CommandContext) error {
+
+}
+
 func cmdQuit(ctx *CommandContext) error {
 	ctx.Writer.WriteSimpleString("OK")
 	ctx.Writer.Flush()

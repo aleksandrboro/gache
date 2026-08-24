@@ -42,6 +42,14 @@ func (r *Router) RegisterCommands() {
 	r.Register("RPOP", cmdRPop)
 	r.Register("LLEN", cmdLLen)
 	r.Register("LRANGE", cmdLRange)
+	r.Register("HGET", cmdHGet)
+	r.Register("HSET", cmdHSet)
+	r.Register("HDEL", cmdHDel)
+	r.Register("HGETALL", cmdHGetAll)
+	r.Register("HKEYS", cmdHKeys)
+	r.Register("HVALS", cmdHVals)
+	r.Register("HLEN", cmdHLen)
+	r.Register("HEXISTS", cmdHExists)
 }
 
 func (r *Router) Register(name string, handler Handler) {

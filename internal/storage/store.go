@@ -30,6 +30,11 @@ type Entry struct {
 	ExpireAt int64
 }
 
+// Type implements [Value].
+func (e *Entry) Type() string {
+	panic("unimplemented")
+}
+
 func NewStore() *Store {
 	store := &Store{}
 	for i := range store.shards {
@@ -509,6 +514,187 @@ func (s *Store) LRange(key string, start, stop int) ([][]byte, error) {
 	}
 
 	return list.Data[start : stop+1], nil
+}
+
+func (s *Store) HSet(key, field string, value []byte) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if v, ok := shard.data[key]; ok {
+		if v.Value.Type() != hashType {
+			return 0, ErrWrongType
+		}
+
+		_, exists := shard.data[key].Value.(HashValue).Data[field]
+		shard.data[key].Value.(HashValue).Data[field] = value
+		if exists {
+			return 0, nil
+		}
+
+		return 1, nil
+	}
+
+	shard.data[key] = &Entry{
+		Value: HashValue{Data: map[string][]byte{
+			field: value,
+		}},
+	}
+
+	return 1, nil
+}
+
+func (s *Store) HGet(key, field string) ([]byte, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return nil, nil
+	}
+
+	if shard.data[key].Value.Type() != hashType {
+		return nil, ErrWrongType
+	}
+
+	value, exists := shard.data[key].Value.(HashValue).Data[field]
+	if !exists {
+		return nil, nil
+	}
+
+	return value, nil
+}
+
+func (s *Store) HDel(key string, fields ...string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, nil
+	}
+
+	if shard.data[key].Value.Type() != hashType {
+		return 0, ErrWrongType
+	}
+
+	count := 0
+	for _, field := range fields {
+		_, exists := shard.data[key].Value.(HashValue).Data[field]
+		if exists {
+			delete(shard.data[key].Value.(HashValue).Data, field)
+			count++
+		}
+	}
+
+	if len(shard.data[key].Value.(HashValue).Data) == 0 {
+		delete(shard.data, key)
+	}
+
+	return count, nil
+}
+
+func (s *Store) HGetAll(key string) (map[string][]byte, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return make(map[string][]byte), nil
+	}
+
+	if shard.data[key].Value.Type() != hashType {
+		return nil, ErrWrongType
+	}
+
+	return shard.data[key].Value.(HashValue).Data, nil
+}
+
+func (s *Store) HKeys(key string) ([]string, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return []string{}, nil
+	}
+
+	if shard.data[key].Value.Type() != hashType {
+		return nil, ErrWrongType
+	}
+
+	keys := make([]string, 0, len(shard.data[key].Value.(HashValue).Data))
+
+	for k := range shard.data[key].Value.(HashValue).Data {
+		keys = append(keys, k)
+	}
+
+	return keys, nil
+}
+
+func (s *Store) HVals(key string) ([][]byte, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return [][]byte{}, nil
+	}
+
+	if shard.data[key].Value.Type() != hashType {
+		return nil, ErrWrongType
+	}
+
+	values := make([][]byte, 0, len(shard.data[key].Value.(HashValue).Data))
+
+	for _, v := range shard.data[key].Value.(HashValue).Data {
+		values = append(values, v)
+	}
+
+	return values, nil
+}
+
+func (s *Store) HLen(key string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, nil
+	}
+
+	if shard.data[key].Value.Type() != hashType {
+		return 0, ErrWrongType
+	}
+
+	return len(shard.data[key].Value.(HashValue).Data), nil
+}
+
+func (s *Store) HExists(key, field string) (bool, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return false, nil
+	}
+
+	if shard.data[key].Value.Type() != hashType {
+		return false, ErrWrongType
+	}
+
+	if _, exists := shard.data[key].Value.(HashValue).Data[field]; !exists {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (s *Store) StartExpirationLoop(ctx context.Context) {

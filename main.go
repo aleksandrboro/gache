@@ -1,7 +1,11 @@
 package main
 
+import "fmt"
+
 func main() {
 	m := make(map[string][]byte)
 
-	delete(m, " ")
+	m[" "] = []byte("")
+
+	fmt.Println(len(m))
 }
