@@ -403,35 +403,177 @@ func cmdLRange(ctx *CommandContext) error {
 }
 
 func cmdHSet(ctx *CommandContext) error {
+	if len(ctx.Args) != 4 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hset' command")
+	}
 
+	key := ctx.Args[1].Str
+	field := ctx.Args[2].Str
+	value := []byte(ctx.Args[3].Str)
+
+	num, err := ctx.Store.HSet(key, field, value)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
 }
 
 func cmdHGet(ctx *CommandContext) error {
+	if len(ctx.Args) != 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hget' command")
+	}
 
+	key := ctx.Args[1].Str
+	field := ctx.Args[2].Str
+
+	value, err := ctx.Store.HGet(key, field)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	if value == nil {
+		return ctx.Writer.WriteNull()
+	}
+
+	return ctx.Writer.WriteBulkString(string(value))
 }
 
 func cmdHDel(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hdel' command")
+	}
 
+	key := ctx.Args[1].Str
+	fields := make([]string, 0, len(ctx.Args[2:]))
+
+	for _, v := range ctx.Args[2:] {
+		fields = append(fields, v.Str)
+	}
+
+	num, err := ctx.Store.HDel(key, fields...)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
 }
 
 func cmdHGetAll(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hgetall' command")
+	}
 
+	key := ctx.Args[1].Str
+
+	fieldsMap, err := ctx.Store.HGetAll(key)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	fieldsSlice := make([]protocol.RESPValue, 0, len(fieldsMap))
+
+	for k, v := range fieldsMap {
+		fieldsSlice = append(fieldsSlice, protocol.RESPValue{
+			Str:  k,
+			Type: protocol.BulkString,
+		}, protocol.RESPValue{
+			Str:  string(v),
+			Type: protocol.BulkString,
+		})
+	}
+
+	return ctx.Writer.WriteArray(fieldsSlice)
 }
 
 func cmdHKeys(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hkeys' command")
+	}
 
+	key := ctx.Args[1].Str
+
+	keys, err := ctx.Store.HKeys(key)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	resp := make([]protocol.RESPValue, 0, len(keys))
+
+	for _, k := range keys {
+		resp = append(resp, protocol.RESPValue{
+			Str:  k,
+			Type: protocol.BulkString,
+		})
+	}
+
+	return ctx.Writer.WriteArray(resp)
 }
 
 func cmdHVals(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hvals' command")
+	}
 
+	key := ctx.Args[1].Str
+
+	vals, err := ctx.Store.HVals(key)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	resp := make([]protocol.RESPValue, 0, len(vals))
+
+	for _, v := range vals {
+		resp = append(resp, protocol.RESPValue{
+			Str:  string(v),
+			Type: protocol.BulkString,
+		})
+	}
+
+	return ctx.Writer.WriteArray(resp)
 }
 
 func cmdHLen(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hlen' command")
+	}
 
+	key := ctx.Args[1].Str
+
+	len, err := ctx.Store.HLen(key)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(len))
 }
 
 func cmdHExists(ctx *CommandContext) error {
+	if len(ctx.Args) != 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hexists' command")
+	}
 
+	key := ctx.Args[1].Str
+	field := ctx.Args[2].Str
+
+	exists, err := ctx.Store.HExists(key, field)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	if !exists {
+		return ctx.Writer.WriteInteger(0)
+	}
+
+	return ctx.Writer.WriteInteger(1)
 }
 
 func cmdQuit(ctx *CommandContext) error {
