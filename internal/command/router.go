@@ -50,6 +50,11 @@ func (r *Router) RegisterCommands() {
 	r.Register("HVALS", cmdHVals)
 	r.Register("HLEN", cmdHLen)
 	r.Register("HEXISTS", cmdHExists)
+	r.Register("SADD", cmdSAdd)
+	r.Register("SREM", cmdSRem)
+	r.Register("SISMEMBER", cmdSIsMember)
+	r.Register("SMEMBERS", cmdSMembers)
+	r.Register("SCARD", cmdSCard)
 }
 
 func (r *Router) Register(name string, handler Handler) {

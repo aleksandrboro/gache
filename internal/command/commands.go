@@ -576,6 +576,110 @@ func cmdHExists(ctx *CommandContext) error {
 	return ctx.Writer.WriteInteger(1)
 }
 
+func cmdSAdd(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'sadd' command")
+	}
+
+	key := ctx.Args[1].Str
+	members := make([]string, 0, len(ctx.Args[2:]))
+
+	for _, arg := range ctx.Args[2:] {
+		members = append(members, arg.Str)
+	}
+
+	num, err := ctx.Store.SAdd(key, members...)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
+func cmdSRem(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'srem' command")
+	}
+
+	key := ctx.Args[1].Str
+	members := make([]string, 0, len(ctx.Args[2:]))
+
+	for _, arg := range ctx.Args[2:] {
+		members = append(members, arg.Str)
+	}
+
+	num, err := ctx.Store.SRem(key, members...)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
+func cmdSIsMember(ctx *CommandContext) error {
+	if len(ctx.Args) != 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'sismember' command")
+	}
+
+	key := ctx.Args[1].Str
+	member := ctx.Args[2].Str
+
+	isMember, err := ctx.Store.SIsMember(key, member)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	if !isMember {
+		return ctx.Writer.WriteInteger(0)
+	}
+
+	return ctx.Writer.WriteInteger(1)
+}
+
+func cmdSMembers(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'smembers' command")
+	}
+
+	key := ctx.Args[1].Str
+
+	members, err := ctx.Store.SMembers(key)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	resp := make([]protocol.RESPValue, 0, len(members))
+
+	for _, member := range members {
+		resp = append(resp, protocol.RESPValue{
+			Str:  member,
+			Type: protocol.BulkString,
+		})
+	}
+
+	return ctx.Writer.WriteArray(resp)
+}
+
+func cmdSCard(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'scard' command")
+	}
+
+	key := ctx.Args[1].Str
+
+	num, err := ctx.Store.SCard(key)
+
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
 func cmdQuit(ctx *CommandContext) error {
 	ctx.Writer.WriteSimpleString("OK")
 	ctx.Writer.Flush()

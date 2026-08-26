@@ -697,6 +697,126 @@ func (s *Store) HExists(key, field string) (bool, error) {
 	return true, nil
 }
 
+func (s *Store) SAdd(key string, members ...string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if _, ok := shard.data[key]; !ok {
+		shard.data[key] = &Entry{
+			Value: SetValue{
+				Data: make(map[string]struct{}),
+			},
+		}
+	}
+
+	if shard.data[key].Value.Type() != setType {
+		return 0, ErrWrongType
+	}
+
+	count := 0
+
+	for _, member := range members {
+		if _, ok := shard.data[key].Value.(SetValue).Data[member]; !ok {
+			shard.data[key].Value.(SetValue).Data[member] = struct{}{}
+			count++
+		}
+	}
+
+	return count, nil
+}
+
+func (s *Store) SRem(key string, members ...string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, nil
+	}
+
+	if shard.data[key].Value.Type() != setType {
+		return 0, ErrWrongType
+	}
+
+	count := 0
+
+	for _, member := range members {
+		if _, ok := shard.data[key].Value.(SetValue).Data[member]; ok {
+			delete(shard.data[key].Value.(SetValue).Data, member)
+			count++
+		}
+	}
+
+	if len(shard.data[key].Value.(SetValue).Data) == 0 {
+		delete(shard.data, key)
+	}
+
+	return count, nil
+}
+
+func (s *Store) SIsMember(key, member string) (bool, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return false, nil
+	}
+
+	if shard.data[key].Value.Type() != setType {
+		return false, ErrWrongType
+	}
+
+	if _, ok := shard.data[key].Value.(SetValue).Data[member]; !ok {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (s *Store) SMembers(key string) ([]string, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return []string{}, nil
+	}
+
+	if shard.data[key].Value.Type() != setType {
+		return nil, ErrWrongType
+	}
+
+	members := make([]string, 0, len(shard.data[key].Value.(SetValue).Data))
+
+	for member := range shard.data[key].Value.(SetValue).Data {
+		members = append(members, member)
+	}
+
+	return members, nil
+}
+
+func (s *Store) SCard(key string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, nil
+	}
+
+	if shard.data[key].Value.Type() != setType {
+		return 0, ErrWrongType
+	}
+
+	return len(shard.data[key].Value.(SetValue).Data), nil
+}
+
 func (s *Store) StartExpirationLoop(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
