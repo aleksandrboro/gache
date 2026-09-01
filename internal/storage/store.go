@@ -31,9 +31,9 @@ type Entry struct {
 }
 
 // Type implements [Value].
-func (e *Entry) Type() string {
-	panic("unimplemented")
-}
+// func (e *Entry) Type() string {
+// 	panic("unimplemented")
+// }
 
 func NewStore() *Store {
 	store := &Store{}

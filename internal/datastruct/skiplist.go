@@ -9,7 +9,7 @@ const (
 type SkipList struct {
 	head   *SkipListNode
 	level  int
-	lenght int
+	length int
 }
 
 type SkipListNode struct {
@@ -20,7 +20,9 @@ type SkipListNode struct {
 
 func NewSkipList() *SkipList {
 	return &SkipList{
-		head: &SkipListNode{},
+		head: &SkipListNode{
+			forward: make([]*SkipListNode, maxLevel),
+		},
 	}
 }
 
@@ -39,5 +41,35 @@ func RandomLevel() int {
 }
 
 func (sl *SkipList) Insert(score float64, member string) {
-	
+	update := make([]*SkipListNode, maxLevel)
+
+	nodeLevel := RandomLevel()
+	if nodeLevel > sl.level {
+		sl.level = nodeLevel
+	}
+
+	level := sl.level - 1
+	current := sl.head
+
+	for level >= 0 {
+		for current.forward[level] != nil && current.forward[level].score < score {
+			current = current.forward[level]
+		}
+
+		update[level] = current
+		level--
+	}
+
+	newNode := &SkipListNode{
+		score:   score,
+		member:  member,
+		forward: make([]*SkipListNode, nodeLevel),
+	}
+
+	for i := range nodeLevel {
+		newNode.forward[i] = update[i].forward[i]
+		update[i].forward[i] = newNode
+	}
+
+	sl.length++
 }
