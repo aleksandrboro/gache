@@ -73,3 +73,55 @@ func (sl *SkipList) Insert(score float64, member string) {
 
 	sl.length++
 }
+
+func (sl *SkipList) Delete(score float64, member string) {
+	founded := false
+	level := sl.level - 1
+	current := sl.head
+
+	for level >= 0 {
+		for current.forward[level] != nil && current.forward[level].score < score {
+			current = current.forward[level]
+		}
+
+		if current.forward[level] != nil && current.forward[level].member == member && current.forward[level].score == score {
+			current.forward[level] = current.forward[level].forward[level]
+			founded = true
+		}
+
+		level--
+	}
+
+	if founded {
+		sl.length--
+	}
+}
+
+func (sl *SkipList) GetByRank(start, stop int) []SkipListNode {
+	if start > stop {
+		return []SkipListNode{}
+	}
+
+	if stop == -1 {
+		stop = sl.length - 1
+	}
+
+	position := 0
+	current := sl.head.forward[0]
+	result := make([]SkipListNode, 0, stop-start+1)
+
+	for position < sl.length {
+		if position > stop {
+			break
+		}
+
+		if position >= start && position <= stop {
+			result = append(result, *current)
+		}
+
+		position++
+		current = current.forward[0]
+	}
+
+	return result
+}

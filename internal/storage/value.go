@@ -1,10 +1,13 @@
 package storage
 
+import "github.com/aleksandrboro/gache/internal/datastruct"
+
 const (
 	stringType = "string"
 	listType   = "list"
 	hashType   = "hash"
 	setType    = "set"
+	zSetType   = "zset"
 )
 
 type Value interface {
@@ -41,4 +44,12 @@ type SetValue struct {
 
 func (v SetValue) Type() string {
 	return setType
+}
+
+type ZSetValue struct {
+	Data *datastruct.ZSet
+}
+
+func (v ZSetValue) Type() string {
+	return zSetType
 }
