@@ -680,6 +680,113 @@ func cmdSCard(ctx *CommandContext) error {
 	return ctx.Writer.WriteInteger(int64(num))
 }
 
+func cmdZAdd(ctx *CommandContext) error {
+	if len(ctx.Args) != 4 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'zadd' command")
+	}
+
+	key := ctx.Args[1].Str
+	score, err := strconv.ParseFloat(ctx.Args[2].Str, 64)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+	member := ctx.Args[3].Str
+
+	num, err := ctx.Store.ZAdd(key, member, score)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
+func cmdZRem(ctx *CommandContext) error {
+	if len(ctx.Args) < 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'zrem' command")
+	}
+
+	key := ctx.Args[1].Str
+	members := make([]string, 0, len(ctx.Args[2:]))
+
+	for _, arg := range ctx.Args[2:] {
+		members = append(members, arg.Str)
+	}
+
+	num, err := ctx.Store.ZRem(key, members...)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(num))
+}
+
+func cmdZScore(ctx *CommandContext) error {
+	if len(ctx.Args) != 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'zscore' command")
+	}
+
+	key := ctx.Args[1].Str
+	member := ctx.Args[2].Str
+
+	score, ok, err := ctx.Store.ZScore(key, member)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	if !ok {
+		return ctx.Writer.WriteNull()
+	}
+
+	return ctx.Writer.WriteBulkString(strconv.FormatFloat(score, 'f', -1, 64))
+}
+
+func cmdZCard(ctx *CommandContext) error {
+	if len(ctx.Args) != 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'zcard' command")
+	}
+
+	key := ctx.Args[1].Str
+
+	count, err := ctx.Store.ZCard(key)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	return ctx.Writer.WriteInteger(int64(count))
+}
+
+func cmdZRange(ctx *CommandContext) error {
+	if len(ctx.Args) != 4 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'zrange' command")
+	}
+
+	key := ctx.Args[1].Str
+	start, err := strconv.ParseInt(ctx.Args[2].Str, 10, 64)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	stop, err := strconv.ParseInt(ctx.Args[3].Str, 10, 64)
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	nodes, err := ctx.Store.ZRange(key, int(start), int(stop))
+	if err != nil {
+		return ctx.Writer.WriteError(err.Error())
+	}
+
+	result := make([]protocol.RESPValue, 0, len(nodes))
+	for _, node := range nodes {
+		result = append(result, protocol.RESPValue{
+			Type: protocol.BulkString,
+			Str:  node.Member,
+		})
+	}
+
+	return ctx.Writer.WriteArray(result)
+}
+
 func cmdQuit(ctx *CommandContext) error {
 	ctx.Writer.WriteSimpleString("OK")
 	ctx.Writer.Flush()

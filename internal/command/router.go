@@ -55,6 +55,11 @@ func (r *Router) RegisterCommands() {
 	r.Register("SISMEMBER", cmdSIsMember)
 	r.Register("SMEMBERS", cmdSMembers)
 	r.Register("SCARD", cmdSCard)
+	r.Register("ZADD", cmdZAdd)
+	r.Register("ZREM", cmdZRem)
+	r.Register("ZSCORE", cmdZScore)
+	r.Register("ZCARD", cmdZCard)
+	r.Register("ZRANGE", cmdZRange)
 }
 
 func (r *Router) Register(name string, handler Handler) {

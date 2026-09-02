@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/aleksandrboro/gache/internal/datastruct"
 )
 
 var (
@@ -815,6 +817,110 @@ func (s *Store) SCard(key string) (int, error) {
 	}
 
 	return len(shard.data[key].Value.(SetValue).Data), nil
+}
+
+func (s *Store) ZAdd(key, member string, score float64) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, ok := shard.data[key]; !ok {
+		shard.data[key] = &Entry{
+			Value: ZSetValue{
+				Data: datastruct.NewZSet(),
+			},
+		}
+	}
+
+	if shard.data[key].Value.Type() != zSetType {
+		return 0, ErrWrongType
+	}
+
+	num := shard.data[key].Value.(ZSetValue).Data.Add(score, member)
+
+	return num, nil
+}
+
+func (s *Store) ZRem(key string, members ...string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, nil
+	}
+
+	if shard.data[key].Value.Type() != zSetType {
+		return 0, ErrWrongType
+	}
+
+	count := 0
+	for _, member := range members {
+		if shard.data[key].Value.(ZSetValue).Data.Rem(member) {
+			count++
+		}
+	}
+
+	if shard.data[key].Value.(ZSetValue).Data.Len() == 0 {
+		delete(shard.data, key)
+	}
+
+	return count, nil
+}
+
+func (s *Store) ZScore(key, member string) (float64, bool, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, false, nil
+	}
+
+	if shard.data[key].Value.Type() != zSetType {
+		return 0, false, ErrWrongType
+	}
+
+	score, ok := shard.data[key].Value.(ZSetValue).Data.Score(member)
+
+	return score, ok, nil
+}
+
+func (s *Store) ZCard(key string) (int, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return 0, nil
+	}
+
+	if shard.data[key].Value.Type() != zSetType {
+		return 0, ErrWrongType
+	}
+
+	return shard.data[key].Value.(ZSetValue).Data.Len(), nil
+}
+
+func (s *Store) ZRange(key string, start, stop int) ([]datastruct.SkipListNode, error) {
+	shard := s.getShard(key)
+
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
+
+	if _, ok := shard.data[key]; !ok {
+		return []datastruct.SkipListNode{}, nil
+	}
+
+	if shard.data[key].Value.Type() != zSetType {
+		return nil, ErrWrongType
+	}
+
+	return shard.data[key].Value.(ZSetValue).Data.Range(start, stop), nil
 }
 
 func (s *Store) StartExpirationLoop(ctx context.Context) {

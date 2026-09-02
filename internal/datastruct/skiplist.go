@@ -13,15 +13,15 @@ type SkipList struct {
 }
 
 type SkipListNode struct {
-	score   float64
-	member  string
-	forward []*SkipListNode
+	Score   float64
+	Member  string
+	Forward []*SkipListNode
 }
 
 func NewSkipList() *SkipList {
 	return &SkipList{
 		head: &SkipListNode{
-			forward: make([]*SkipListNode, maxLevel),
+			Forward: make([]*SkipListNode, maxLevel),
 		},
 	}
 }
@@ -52,8 +52,8 @@ func (sl *SkipList) Insert(score float64, member string) {
 	current := sl.head
 
 	for level >= 0 {
-		for current.forward[level] != nil && current.forward[level].score < score {
-			current = current.forward[level]
+		for current.Forward[level] != nil && current.Forward[level].Score < score {
+			current = current.Forward[level]
 		}
 
 		update[level] = current
@@ -61,14 +61,14 @@ func (sl *SkipList) Insert(score float64, member string) {
 	}
 
 	newNode := &SkipListNode{
-		score:   score,
-		member:  member,
-		forward: make([]*SkipListNode, nodeLevel),
+		Score:   score,
+		Member:  member,
+		Forward: make([]*SkipListNode, nodeLevel),
 	}
 
 	for i := range nodeLevel {
-		newNode.forward[i] = update[i].forward[i]
-		update[i].forward[i] = newNode
+		newNode.Forward[i] = update[i].Forward[i]
+		update[i].Forward[i] = newNode
 	}
 
 	sl.length++
@@ -80,12 +80,12 @@ func (sl *SkipList) Delete(score float64, member string) {
 	current := sl.head
 
 	for level >= 0 {
-		for current.forward[level] != nil && current.forward[level].score < score {
-			current = current.forward[level]
+		for current.Forward[level] != nil && current.Forward[level].Score < score {
+			current = current.Forward[level]
 		}
 
-		if current.forward[level] != nil && current.forward[level].member == member && current.forward[level].score == score {
-			current.forward[level] = current.forward[level].forward[level]
+		if current.Forward[level] != nil && current.Forward[level].Member == member && current.Forward[level].Score == score {
+			current.Forward[level] = current.Forward[level].Forward[level]
 			founded = true
 		}
 
@@ -107,7 +107,7 @@ func (sl *SkipList) GetByRank(start, stop int) []SkipListNode {
 	}
 
 	position := 0
-	current := sl.head.forward[0]
+	current := sl.head.Forward[0]
 	result := make([]SkipListNode, 0, stop-start+1)
 
 	for position < sl.length {
@@ -120,7 +120,7 @@ func (sl *SkipList) GetByRank(start, stop int) []SkipListNode {
 		}
 
 		position++
-		current = current.forward[0]
+		current = current.Forward[0]
 	}
 
 	return result
