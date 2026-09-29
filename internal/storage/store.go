@@ -191,7 +191,9 @@ func (s *Store) incrByFloat(key string, increment int64) (int64, error) {
 
 	var num int64
 
-	if v.ExpireAt <= time.Now().UnixNano() && v.ExpireAt != 0 {
+	if !ok {
+		num = 0
+	} else if v.ExpireAt <= time.Now().UnixNano() && v.ExpireAt != 0 {
 		num = 0
 		v.ExpireAt = 0
 	} else {

@@ -688,7 +688,7 @@ func cmdZAdd(ctx *CommandContext) error {
 	key := ctx.Args[1].Str
 	score, err := strconv.ParseFloat(ctx.Args[2].Str, 64)
 	if err != nil {
-		return ctx.Writer.WriteError(err.Error())
+		return ctx.Writer.WriteError("ERR " + err.Error())
 	}
 	member := ctx.Args[3].Str
 

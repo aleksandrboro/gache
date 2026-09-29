@@ -98,12 +98,15 @@ func (sl *SkipList) Delete(score float64, member string) {
 }
 
 func (sl *SkipList) GetByRank(start, stop int) []SkipListNode {
-	if start > stop {
-		return []SkipListNode{}
-	}
-
 	if stop == -1 {
 		stop = sl.length - 1
+	}
+	if start == -1 {
+		start = sl.length - 1
+	}
+
+	if start > stop {
+		return []SkipListNode{}
 	}
 
 	position := 0
