@@ -7,23 +7,26 @@ import (
 	"io"
 	"net"
 
+	"github.com/aleksandrboro/gache/internal/aof"
 	"github.com/aleksandrboro/gache/internal/command"
 	"github.com/aleksandrboro/gache/internal/protocol"
 	"github.com/aleksandrboro/gache/internal/storage"
 )
 
 type Server struct {
-	addr     string
-	store    *storage.Store
-	router   *command.Router
-	listener net.Listener
+	addr      string
+	store     *storage.Store
+	router    *command.Router
+	aofWriter *aof.AOFWriter
+	listener  net.Listener
 }
 
-func NewServer(addr string, store *storage.Store, router *command.Router) *Server {
+func NewServer(addr string, store *storage.Store, router *command.Router, aofWriter *aof.AOFWriter) *Server {
 	return &Server{
-		addr:   addr,
-		store:  store,
-		router: router,
+		addr:      addr,
+		store:     store,
+		router:    router,
+		aofWriter: aofWriter,
 	}
 }
 
@@ -88,6 +91,10 @@ func (s *Server) handleConn(conn net.Conn) {
 			writer.WriteError("ERR failed to handle request")
 			writer.Flush()
 			continue
+		}
+
+		if err := s.aofWriter.WriteCommand(ctx.Args); err != nil {
+			return
 		}
 
 		writer.Flush()

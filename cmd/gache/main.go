@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/aleksandrboro/gache/internal/aof"
 	"github.com/aleksandrboro/gache/internal/command"
 	"github.com/aleksandrboro/gache/internal/server"
 	"github.com/aleksandrboro/gache/internal/storage"
@@ -17,12 +18,19 @@ func main() {
 	router := command.NewRouter()
 	router.RegisterCommands()
 
+	aof.LoadAOF("appendonly.aof", store, router)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	aofWriter, err := aof.NewAOFWriter(ctx, "appendonly.aof", "always")
+	if err != nil {
+		panic(err)
+	}
+
 	go store.StartExpirationLoop(ctx)
 
-	server := server.NewServer(":6378", store, router)
+	server := server.NewServer(":6378", store, router, aofWriter)
 
 	go func() {
 		if err := server.Start(); err != nil {
