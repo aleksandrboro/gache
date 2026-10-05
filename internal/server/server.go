@@ -94,7 +94,9 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 
 		if err := s.aofWriter.WriteCommand(ctx.Args); err != nil {
-			return
+			if !errors.Is(err, aof.ErrNotWriteCommand) {
+				return
+			}
 		}
 
 		writer.Flush()

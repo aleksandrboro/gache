@@ -403,15 +403,19 @@ func cmdLRange(ctx *CommandContext) error {
 }
 
 func cmdHSet(ctx *CommandContext) error {
-	if len(ctx.Args) != 4 {
+	if len(ctx.Args) < 4 || len(ctx.Args)%2 != 0 {
 		return ctx.Writer.WriteError("ERR wrong number of arguments for 'hset' command")
 	}
 
 	key := ctx.Args[1].Str
-	field := ctx.Args[2].Str
-	value := []byte(ctx.Args[3].Str)
 
-	num, err := ctx.Store.HSet(key, field, value)
+	pairs := make(map[string][]byte)
+
+	for i := 0; i < len(ctx.Args[2:])-1; i += 2 {
+		pairs[ctx.Args[2:][i].Str] = []byte(ctx.Args[2:][i+1].Str)
+	}
+
+	num, err := ctx.Store.HSet(key, pairs)
 
 	if err != nil {
 		return ctx.Writer.WriteError(err.Error())

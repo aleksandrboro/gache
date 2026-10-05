@@ -46,6 +46,7 @@ func main() {
 	<-sign
 
 	cancel()
+	aofWriter.Close()
 	if err := server.Stop(); err != nil {
 		fmt.Println(err)
 	}

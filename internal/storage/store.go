@@ -520,7 +520,7 @@ func (s *Store) LRange(key string, start, stop int) ([][]byte, error) {
 	return list.Data[start : stop+1], nil
 }
 
-func (s *Store) HSet(key, field string, value []byte) (int, error) {
+func (s *Store) HSet(key string, pairs map[string][]byte) (int, error) {
 	shard := s.getShard(key)
 
 	shard.mu.Lock()
@@ -530,22 +530,27 @@ func (s *Store) HSet(key, field string, value []byte) (int, error) {
 			return 0, ErrWrongType
 		}
 
-		_, exists := shard.data[key].Value.(HashValue).Data[field]
-		shard.data[key].Value.(HashValue).Data[field] = value
-		if exists {
-			return 0, nil
+		count := 0
+		for field, value := range pairs {
+			_, exists := shard.data[key].Value.(HashValue).Data[field]
+			shard.data[key].Value.(HashValue).Data[field] = value
+			if !exists {
+				count++
+			}
 		}
 
-		return 1, nil
+		return count, nil
 	}
 
 	shard.data[key] = &Entry{
-		Value: HashValue{Data: map[string][]byte{
-			field: value,
-		}},
+		Value: HashValue{Data: make(map[string][]byte)},
 	}
 
-	return 1, nil
+	for field, value := range pairs {
+		shard.data[key].Value.(HashValue).Data[field] = value
+	}
+
+	return len(pairs), nil
 }
 
 func (s *Store) HGet(key, field string) ([]byte, error) {

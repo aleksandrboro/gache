@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,7 +43,7 @@ var (
 		"PERSIST": struct{}{},
 	}
 
-	errNotWriteCommand = errors.New("Command isn't for writing")
+	ErrNotWriteCommand = errors.New("Command isn't for writing")
 )
 
 type AOFWriter struct {
@@ -83,8 +84,8 @@ func NewAOFWriter(ctx context.Context, filename, fsyncPolicy string) (*AOFWriter
 }
 
 func (w *AOFWriter) WriteCommand(args []protocol.RESPValue) error {
-	if _, ok := writeCommands[args[0].Str]; !ok {
-		return errNotWriteCommand
+	if _, ok := writeCommands[strings.ToUpper(args[0].Str)]; !ok {
+		return ErrNotWriteCommand
 	}
 
 	w.mu.Lock()
