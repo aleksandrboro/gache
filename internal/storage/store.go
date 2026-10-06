@@ -23,7 +23,7 @@ type Store struct {
 }
 
 type Shard struct {
-	mu   sync.RWMutex
+	mu   *sync.RWMutex
 	data map[string]*Entry
 }
 
@@ -40,7 +40,10 @@ type Entry struct {
 func NewStore() *Store {
 	store := &Store{}
 	for i := range store.shards {
-		store.shards[i].data = make(map[string]*Entry)
+		store.shards[i] = Shard{
+			mu:   &sync.RWMutex{},
+			data: make(map[string]*Entry),
+		}
 	}
 
 	return store
@@ -944,6 +947,26 @@ func (s *Store) StartExpirationLoop(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (s *Store) ForEach(fn func(key string, entry *Entry)) {
+	wg := sync.WaitGroup{}
+
+	for _, shard := range s.shards {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			shard.mu.RLock()
+			defer shard.mu.RUnlock()
+
+			for k, en := range shard.data {
+				fn(k, en)
+			}
+		}()
+	}
+
+	wg.Wait()
 }
 
 func expirationLoop(shard *Shard) {
