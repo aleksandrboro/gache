@@ -78,9 +78,10 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 
 		ctx := &command.CommandContext{
-			Args:   val.Array,
-			Writer: writer,
-			Store:  s.store,
+			Args:     val.Array,
+			Writer:   writer,
+			Rewriter: s.aofWriter,
+			Store:    s.store,
 		}
 
 		if err := s.router.Handle(ctx); err != nil {

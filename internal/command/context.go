@@ -6,7 +6,12 @@ import (
 )
 
 type CommandContext struct {
-	Args   []protocol.RESPValue
-	Writer *protocol.Writer
-	Store  *storage.Store
+	Args     []protocol.RESPValue
+	Writer   *protocol.Writer
+	Store    *storage.Store
+	Rewriter Rewriter
+}
+
+type Rewriter interface {
+	Rewrite(store *storage.Store) error
 }

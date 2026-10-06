@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aleksandrboro/gache/internal/protocol"
+	"github.com/aleksandrboro/gache/internal/storage"
 )
 
 const (
@@ -47,6 +48,7 @@ var (
 )
 
 type AOFWriter struct {
+	filename    string
 	file        *os.File
 	writer      *bufio.Writer
 	mu          sync.Mutex
@@ -77,6 +79,7 @@ func NewAOFWriter(ctx context.Context, filename, fsyncPolicy string) (*AOFWriter
 	}
 
 	return &AOFWriter{
+		filename:    filename,
 		file:        file,
 		writer:      writer,
 		fsyncPolicy: fsyncPolicy,
@@ -113,6 +116,10 @@ func (w *AOFWriter) WriteCommand(args []protocol.RESPValue) error {
 	}
 
 	return nil
+}
+
+func (w *AOFWriter) Rewrite(store *storage.Store) error {
+	return Rewrite(w.filename, store)
 }
 
 func (w *AOFWriter) Close() error {

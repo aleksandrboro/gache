@@ -791,6 +791,20 @@ func cmdZRange(ctx *CommandContext) error {
 	return ctx.Writer.WriteArray(result)
 }
 
+func cmdBgRewriteAOF(ctx *CommandContext) error {
+	if len(ctx.Args) != 1 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'BGREWRITEAOF' command")
+	}
+
+	if ctx.Rewriter == nil {
+		return ctx.Writer.WriteError("nil rewriter")
+	}
+
+	go ctx.Rewriter.Rewrite(ctx.Store)
+
+	return ctx.Writer.WriteSimpleString("Background append only file rewriting started")
+}
+
 func cmdQuit(ctx *CommandContext) error {
 	ctx.Writer.WriteSimpleString("OK")
 	ctx.Writer.Flush()

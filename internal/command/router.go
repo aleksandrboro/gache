@@ -60,6 +60,7 @@ func (r *Router) RegisterCommands() {
 	r.Register("ZSCORE", cmdZScore)
 	r.Register("ZCARD", cmdZCard)
 	r.Register("ZRANGE", cmdZRange)
+	r.Register("BGREWRITEAOF", cmdBgRewriteAOF)
 }
 
 func (r *Router) Register(name string, handler Handler) {
