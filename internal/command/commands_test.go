@@ -3,7 +3,9 @@ package command
 import (
 	"bufio"
 	"bytes"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/aleksandrboro/gache/internal/protocol"
 	"github.com/aleksandrboro/gache/internal/storage"
@@ -2576,5 +2578,84 @@ func TestZRange(t *testing.T) {
 		ctx.Writer.Flush()
 
 		require.Equal(t, "*0\r\n", buf.String())
+	})
+}
+
+type mockRewriter struct {
+	called atomic.Bool
+}
+
+func (mr *mockRewriter) Rewrite(storage *storage.Store) error {
+	mr.called.Store(true)
+	return nil
+}
+
+func TestBgRewriteAOF(t *testing.T) {
+	router := NewRouter()
+	router.Register("BGREWRITEAOF", cmdBgRewriteAOF)
+
+	t.Run("correct args", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		w := bufio.NewWriter(&buf)
+
+		mock := &mockRewriter{}
+
+		ctx := CommandContext{
+			Args:     []protocol.RESPValue{{Str: "BGREWRITEAOF", Type: protocol.BulkString}},
+			Writer:   protocol.NewWriter(w),
+			Store:    storage.NewStore(),
+			Rewriter: mock,
+		}
+		err := router.Handle(&ctx)
+		ctx.Writer.Flush()
+
+		require.NoError(t, err)
+		require.Equal(t, "+Background append only file rewriting started\r\n", buf.String())
+		time.Sleep(time.Millisecond)
+		require.True(t, mock.called.Load())
+	})
+
+	t.Run("wrong args number", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		w := bufio.NewWriter(&buf)
+
+		mock := &mockRewriter{}
+
+		ctx := CommandContext{
+			Args:     []protocol.RESPValue{{Str: "BGREWRITEAOF", Type: protocol.BulkString}, {Str: "second_arg", Type: protocol.BulkString}},
+			Writer:   protocol.NewWriter(w),
+			Store:    storage.NewStore(),
+			Rewriter: mock,
+		}
+
+		err := router.Handle(&ctx)
+		ctx.Writer.Flush()
+
+		require.NoError(t, err)
+		require.Contains(t, buf.String(), "ERR")
+		time.Sleep(time.Millisecond)
+		require.False(t, mock.called.Load())
+	})
+
+	t.Run("nil rewriter", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		w := bufio.NewWriter(&buf)
+
+		mock := &mockRewriter{}
+
+		ctx := CommandContext{
+			Args:     []protocol.RESPValue{{Str: "BGREWRITEAOF", Type: protocol.BulkString}},
+			Writer:   protocol.NewWriter(w),
+			Store:    storage.NewStore(),
+			Rewriter: nil,
+		}
+
+		err := router.Handle(&ctx)
+		ctx.Writer.Flush()
+
+		require.NoError(t, err)
+		require.Equal(t, "-nil rewriter\r\n", buf.String())
+		time.Sleep(time.Millisecond)
+		require.False(t, mock.called.Load())
 	})
 }
