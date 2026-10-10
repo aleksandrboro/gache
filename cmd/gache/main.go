@@ -9,6 +9,7 @@ import (
 
 	"github.com/aleksandrboro/gache/internal/aof"
 	"github.com/aleksandrboro/gache/internal/command"
+	"github.com/aleksandrboro/gache/internal/pubsub"
 	"github.com/aleksandrboro/gache/internal/server"
 	"github.com/aleksandrboro/gache/internal/storage"
 )
@@ -30,7 +31,9 @@ func main() {
 
 	go store.StartExpirationLoop(ctx)
 
-	server := server.NewServer(":6378", store, router, aofWriter)
+	hub := pubsub.NewHub()
+
+	server := server.NewServer(":6378", store, router, aofWriter, hub)
 
 	go func() {
 		if err := server.Start(); err != nil {

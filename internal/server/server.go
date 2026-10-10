@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 
 	"github.com/aleksandrboro/gache/internal/aof"
 	"github.com/aleksandrboro/gache/internal/command"
 	"github.com/aleksandrboro/gache/internal/protocol"
+	"github.com/aleksandrboro/gache/internal/pubsub"
 	"github.com/aleksandrboro/gache/internal/storage"
 )
 
@@ -18,15 +20,17 @@ type Server struct {
 	store     *storage.Store
 	router    *command.Router
 	aofWriter *aof.AOFWriter
+	hub       *pubsub.Hub
 	listener  net.Listener
 }
 
-func NewServer(addr string, store *storage.Store, router *command.Router, aofWriter *aof.AOFWriter) *Server {
+func NewServer(addr string, store *storage.Store, router *command.Router, aofWriter *aof.AOFWriter, hub *pubsub.Hub) *Server {
 	return &Server{
 		addr:      addr,
 		store:     store,
 		router:    router,
 		aofWriter: aofWriter,
+		hub:       hub,
 	}
 }
 
@@ -60,20 +64,53 @@ func (s *Server) handleConn(conn net.Conn) {
 	parser := protocol.NewParser(r)
 	writer := protocol.NewWriter(w)
 
+	sub := pubsub.NewSubscriber()
+	var writeMu sync.Mutex
+
+	defer func() {
+		close(sub.Done)
+		if s.hub != nil {
+			s.hub.UnsubscribeAll(sub)
+		}
+	}()
+
+	// Forwarding goroutine: reads from MsgChan and writes to TCP
+	go func() {
+		for {
+			select {
+			case msg := <-sub.MsgChan:
+				writeMu.Lock()
+				writer.WriteArray([]protocol.RESPValue{
+					{Type: protocol.BulkString, Str: msg.Type},
+					{Type: protocol.BulkString, Str: msg.Channel},
+					{Type: protocol.BulkString, Str: msg.Data},
+				})
+				writer.Flush()
+				writeMu.Unlock()
+			case <-sub.Done:
+				return
+			}
+		}
+	}()
+
 	for {
 		val, err := parser.Parse()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
 			}
+			writeMu.Lock()
 			writer.WriteError(err.Error())
 			writer.Flush()
+			writeMu.Unlock()
 			continue
 		}
 
 		if val.Type != protocol.Array || len(val.Array) == 0 {
+			writeMu.Lock()
 			writer.WriteError("ERR invalid command format")
 			writer.Flush()
+			writeMu.Unlock()
 			continue
 		}
 
@@ -82,6 +119,9 @@ func (s *Server) handleConn(conn net.Conn) {
 			Writer:   writer,
 			Rewriter: s.aofWriter,
 			Store:    s.store,
+			Hub:      s.hub,
+			Sub:      sub,
+			WriteMu:  &writeMu,
 		}
 
 		if err := s.router.Handle(ctx); err != nil {
@@ -89,8 +129,10 @@ func (s *Server) handleConn(conn net.Conn) {
 				return
 			}
 
+			writeMu.Lock()
 			writer.WriteError("ERR failed to handle request")
 			writer.Flush()
+			writeMu.Unlock()
 			continue
 		}
 
@@ -100,7 +142,9 @@ func (s *Server) handleConn(conn net.Conn) {
 			}
 		}
 
+		writeMu.Lock()
 		writer.Flush()
+		writeMu.Unlock()
 	}
 }
 

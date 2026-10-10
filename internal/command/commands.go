@@ -805,6 +805,104 @@ func cmdBgRewriteAOF(ctx *CommandContext) error {
 	return ctx.Writer.WriteSimpleString("Background append only file rewriting started")
 }
 
+func cmdPublish(ctx *CommandContext) error {
+	if len(ctx.Args) != 3 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'PUBLISH' command")
+	}
+
+	channel := ctx.Args[1].Str
+	message := ctx.Args[2].Str
+
+	count := ctx.Hub.Publish(channel, message)
+
+	return ctx.Writer.WriteInteger(int64(count))
+}
+
+func cmdSubscribe(ctx *CommandContext) error {
+	if len(ctx.Args) < 2 {
+		return ctx.Writer.WriteError("ERR wrong number of arguments for 'subscribe' command")
+	}
+
+	for _, arg := range ctx.Args[1:] {
+		channel := arg.Str
+
+		ctx.Hub.Subscribe(ctx.Sub, channel)
+
+		ctx.Sub.Mu.Lock()
+		if ctx.Sub.Channels == nil {
+			ctx.Sub.Channels = make(map[string]struct{})
+		}
+		ctx.Sub.Channels[channel] = struct{}{}
+		count := len(ctx.Sub.Channels)
+		ctx.Sub.Mu.Unlock()
+
+		ctx.WriteMu.Lock()
+		ctx.Writer.WriteArray([]protocol.RESPValue{
+			{Type: protocol.BulkString, Str: "subscribe"},
+			{Type: protocol.BulkString, Str: channel},
+			{Type: protocol.Integer, Int: int64(count)},
+		})
+		ctx.Writer.Flush()
+		ctx.WriteMu.Unlock()
+	}
+
+	return nil
+}
+
+func cmdUnsubscribe(ctx *CommandContext) error {
+	if len(ctx.Args) < 2 {
+		// Unsubscribe from all channels
+		ctx.Sub.Mu.Lock()
+		channels := make([]string, 0, len(ctx.Sub.Channels))
+		for ch := range ctx.Sub.Channels {
+			channels = append(channels, ch)
+		}
+		ctx.Sub.Mu.Unlock()
+
+		for _, ch := range channels {
+			ctx.Hub.Unsubscribe(ctx.Sub, ch)
+
+			ctx.Sub.Mu.Lock()
+			delete(ctx.Sub.Channels, ch)
+			count := len(ctx.Sub.Channels)
+			ctx.Sub.Mu.Unlock()
+
+			ctx.WriteMu.Lock()
+			ctx.Writer.WriteArray([]protocol.RESPValue{
+				{Type: protocol.BulkString, Str: "unsubscribe"},
+				{Type: protocol.BulkString, Str: ch},
+				{Type: protocol.Integer, Int: int64(count)},
+			})
+			ctx.Writer.Flush()
+			ctx.WriteMu.Unlock()
+		}
+
+		return nil
+	}
+
+	for _, arg := range ctx.Args[1:] {
+		channel := arg.Str
+
+		ctx.Hub.Unsubscribe(ctx.Sub, channel)
+
+		ctx.Sub.Mu.Lock()
+		delete(ctx.Sub.Channels, channel)
+		count := len(ctx.Sub.Channels)
+		ctx.Sub.Mu.Unlock()
+
+		ctx.WriteMu.Lock()
+		ctx.Writer.WriteArray([]protocol.RESPValue{
+			{Type: protocol.BulkString, Str: "unsubscribe"},
+			{Type: protocol.BulkString, Str: channel},
+			{Type: protocol.Integer, Int: int64(count)},
+		})
+		ctx.Writer.Flush()
+		ctx.WriteMu.Unlock()
+	}
+
+	return nil
+}
+
 func cmdQuit(ctx *CommandContext) error {
 	ctx.Writer.WriteSimpleString("OK")
 	ctx.Writer.Flush()

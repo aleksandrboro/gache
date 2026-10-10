@@ -61,6 +61,9 @@ func (r *Router) RegisterCommands() {
 	r.Register("ZCARD", cmdZCard)
 	r.Register("ZRANGE", cmdZRange)
 	r.Register("BGREWRITEAOF", cmdBgRewriteAOF)
+	r.Register("SUBSCRIBE", cmdSubscribe)
+	r.Register("UNSUBSCRIBE", cmdUnsubscribe)
+	r.Register("PUBLISH", cmdPublish)
 }
 
 func (r *Router) Register(name string, handler Handler) {
